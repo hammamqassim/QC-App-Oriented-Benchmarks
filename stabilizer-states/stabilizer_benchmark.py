@@ -170,7 +170,7 @@ def run (min_qubits=3, max_qubits=6, max_circuits=3, num_shots=100,
             
             # create the circuit for given qubit size and store time metric
             ts = time.time()
-            qc = StabilizerCircuit(num_qubits) if method==1 else StabilizerCircuit_method2(num_qubits)
+            qc = StabilizerCircuit(num_qubits) if method==1 else StabilizerCircuit2(num_qubits)
             metrics.store_metric(num_qubits, j, 'create_time', time.time()-ts)
 
             # submit circuit for execution on target (simulator, cloud simulator, or hardware)
