@@ -7,6 +7,9 @@ import time
 
 import numpy as np
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister, quantum_info
+from random import sample
+from copy import copy
+import itertools
 
 sys.path[1:1] = [ "_common", "_common/qiskit" ]
 sys.path[1:1] = [ "../../_common", "../../_common/qiskit" ]
@@ -21,28 +24,28 @@ verbose = False
 QC_ = None
 # Uf_ = None
 
-############### Circuit Definitions
+# ############## Circuit Definitions
 
-def StabilizerCircuit(num_qubits):
-    cliff = quantum_info.random_clifford(num_qubits)
-    cliff_circuit = cliff.to_circuit()
-    pauli = random_stabilizer(cliff)
-    circuit = append_measurement(cliff_circuit, pauli)
-    return circuit
-
-def StabilizerCircuit2(num_qubits, depth=10):
+def StabilizerCircuit(num_qubits, coupling_graph=None, n_layers=2):
     
+    if coupling_graph is None:
+        coupling_graph = list(itertools.combinations(range(num_qubits), 2))
+        
+    coupling_graph = {frozenset(edge) for edge in coupling_graph}
     circuit = QuantumCircuit(num_qubits)
-
-    for layer in range(depth):
+    
+    for layer in range(n_layers):
+        cg_temp = copy(coupling_graph)
         for qubit in range(num_qubits):
             gate = quantum_info.random_clifford(1).to_circuit()
             circuit = circuit.compose(gate, [qubit])
-        #circuit.barrier()
-        for qubit in range(layer%2, num_qubits - 1, 2):
+        circuit.barrier()
+        while len(cg_temp) > 0:
+            edge = sample(cg_temp, 1)[0]
             gate = quantum_info.random_clifford(2).to_circuit()
-            circuit = circuit.compose(gate, [qubit, qubit + 1])
-        #circuit.barrier()
+            circuit = circuit.compose(gate, edge)
+            cg_temp = cg_temp - {e for e in cg_temp if len(e & edge) > 0}
+        circuit.barrier()
     
     cliff = quantum_info.Clifford(circuit)
     pauli = random_stabilizer(cliff)
@@ -54,17 +57,21 @@ def random_stabilizer(cliff):
     n_sys = cliff.num_qubits
     m = np.random.randint(1, 2 ** n_sys)
     random_bitstring = f'{{0:0{n_sys}b}}'.format(m)
-    stabilizer = (quantum_info.Pauli("".join(n_sys * ['I'])), 1)
+    stabilizer = quantum_info.Pauli("".join(n_sys * ['I']))
     for idx, bit in enumerate(random_bitstring):
         if int(bit) == 1:
             p = quantum_info.Pauli(cliff.stabilizer.to_labels()[idx])
-            pauli, phase = quantum_info.Pauli.sgn_prod(stabilizer[0], p)
-            stabilizer = (pauli, phase * stabilizer[1])
-    return (stabilizer[0].to_label(), stabilizer[1])
+            stabilizer = stabilizer.compose(p)
+    return stabilizer
 
-def append_measurement(circuit, pauli):
-    stabilizer = pauli[0]
-    phase = pauli[1]
+def append_measurement(circuit, stabilizer):
+
+    if stabilizer.to_label()[0] == '-':
+        stabilizer = stabilizer.to_label()[1:]
+        phase = -1
+    else:
+        stabilizer = stabilizer.to_label()
+        phase = 1
     
     circuit_copy = circuit.copy()
     circuit_copy.barrier()
@@ -95,7 +102,7 @@ def append_measurement(circuit, pauli):
     
     return circuit_copy
 
-############### Result Data Analysis
+# ############## Result Data Analysis
 
 # Analyze and print measured results
 # Expected result is always an even bitstring, so fidelity calc is simple
@@ -123,11 +130,11 @@ def analyze_and_print_result(qc, result):
         
     return counts, fidelity
 
-################ Benchmark Loop
+# ############### Benchmark Loop
 
 # Execute program with default parameters
 def run (min_qubits=3, max_qubits=6, max_circuits=3, num_shots=100,
-        backend_id='qasm_simulator', method = 1, provider_backend=None,
+        backend_id='qasm_simulator', coupling_graph=None, n_layers=3, provider_backend=None,
         hub="ibm-q", group="open", project="main", exec_options=None):
 
     print("Stabilizer State Benchmark Program - Qiskit")
@@ -170,7 +177,7 @@ def run (min_qubits=3, max_qubits=6, max_circuits=3, num_shots=100,
             
             # create the circuit for given qubit size and store time metric
             ts = time.time()
-            qc = StabilizerCircuit(num_qubits) if method==1 else StabilizerCircuit2(num_qubits)
+            qc = StabilizerCircuit(num_qubits, coupling_graph, n_layers)
             metrics.store_metric(num_qubits, j, 'create_time', time.time()-ts)
 
             # submit circuit for execution on target (simulator, cloud simulator, or hardware)
@@ -190,4 +197,4 @@ def run (min_qubits=3, max_qubits=6, max_circuits=3, num_shots=100,
 
 # if main, execute method
 if __name__ == '__main__': run()
-   
+
