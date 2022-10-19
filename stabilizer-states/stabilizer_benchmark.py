@@ -30,7 +30,10 @@ def StabilizerCircuit(num_qubits, coupling_graph=None, n_layers=2):
     
     if coupling_graph is None:
         coupling_graph = list(itertools.combinations(range(num_qubits), 2))
-        
+    
+    qubits = range(num_qubits)
+    coupling_graph = [edge for edge in coupling_graph if edge[0] in qubits and edge[1] in qubits]
+
     coupling_graph = {frozenset(edge) for edge in coupling_graph}
     circuit = QuantumCircuit(num_qubits)
     
@@ -74,7 +77,7 @@ def append_measurement(circuit, stabilizer):
         phase = 1
     
     circuit_copy = circuit.copy()
-    circuit_copy.barrier()
+    #circuit_copy.barrier()
     
     mmt_qubits = []
 
