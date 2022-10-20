@@ -26,7 +26,7 @@ QC_ = None
 
 # ############## Circuit Definitions
 
-def StabilizerCircuit(num_qubits, coupling_graph=None, n_layers=2):
+def StabilizerCircuit(num_qubits, coupling_graph=None, n_layers=2, method=1):
     
     if coupling_graph is None:
         coupling_graph = list(itertools.combinations(range(num_qubits), 2))
@@ -43,11 +43,16 @@ def StabilizerCircuit(num_qubits, coupling_graph=None, n_layers=2):
             gate = quantum_info.random_clifford(1).to_circuit()
             circuit = circuit.compose(gate, [qubit])
         circuit.barrier()
+        
         while len(cg_temp) > 0:
             edge = sample(cg_temp, 1)[0]
-            gate = quantum_info.random_clifford(2).to_circuit()
-            circuit = circuit.compose(gate, edge)
+            if method == 1:
+                circuit.cz(list(edge)[0], list(edge)[1])
+            elif method == 2:
+                gate = quantum_info.random_clifford(2).to_circuit()
+                circuit = circuit.compose(gate, edge)
             cg_temp = cg_temp - {e for e in cg_temp if len(e & edge) > 0}
+            
         circuit.barrier()
     
     cliff = quantum_info.Clifford(circuit)
@@ -68,7 +73,6 @@ def random_stabilizer(cliff):
     return stabilizer
 
 def append_measurement(circuit, stabilizer):
-
     if stabilizer.to_label()[0] == '-':
         stabilizer = stabilizer.to_label()[1:]
         phase = -1
@@ -77,10 +81,9 @@ def append_measurement(circuit, stabilizer):
         phase = 1
     
     circuit_copy = circuit.copy()
-    #circuit_copy.barrier()
-    
     mmt_qubits = []
-
+    
+    # rotate the measurement basis for each qubit
     for idx, pauli in enumerate(reversed(stabilizer)):
         if pauli == 'X':
             circuit_copy.h(idx)
@@ -97,8 +100,12 @@ def append_measurement(circuit, stabilizer):
 
     cl = ClassicalRegister(size=len(mmt_qubits))
     circuit_copy.add_register(cl)
-
-    circuit_copy.barrier()
+    
+    # only add a barrier if there is a basis change
+    if all(pauli == 'Z' or pauli == 'I' for pauli in stabilizer):
+        pass
+    else:
+        circuit_copy.barrier()
 
     for idx, qubit in enumerate(mmt_qubits):
         circuit_copy.measure(qubit, cl[idx])
