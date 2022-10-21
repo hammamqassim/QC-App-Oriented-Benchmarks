@@ -32,9 +32,10 @@ def StabilizerCircuit(num_qubits, coupling_graph=None, n_layers=2, method=1):
         coupling_graph = list(itertools.combinations(range(num_qubits), 2))
     
     qubits = range(num_qubits)
-    coupling_graph = [edge for edge in coupling_graph if edge[0] in qubits and edge[1] in qubits]
-
-    coupling_graph = {frozenset(edge) for edge in coupling_graph}
+    
+    coupling_graph = {frozenset(edge) for edge in coupling_graph if edge[0] in qubits and edge[1] in qubits}
+    #coupling_graph = {frozenset(edge) for edge in coupling_graph}
+    
     circuit = QuantumCircuit(num_qubits)
     
     for layer in range(n_layers):
@@ -48,8 +49,10 @@ def StabilizerCircuit(num_qubits, coupling_graph=None, n_layers=2, method=1):
             edge = sample(cg_temp, 1)[0]
             if method == 1:
                 circuit.cz(list(edge)[0], list(edge)[1])
+                print('used method 1')
             elif method == 2:
                 gate = quantum_info.random_clifford(2).to_circuit()
+                print(f'used method 2, edge is {edge}')
                 circuit = circuit.compose(gate, edge)
             cg_temp = cg_temp - {e for e in cg_temp if len(e & edge) > 0}
             
