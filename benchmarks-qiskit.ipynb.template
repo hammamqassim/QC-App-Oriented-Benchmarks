@@ -394,30 +394,6 @@
    "cell_type": "markdown",
    "metadata": {},
    "source": [
-    "### Stabilizer States"
-   ]
-  },
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "import sys\n",
-    "sys.path.insert(1, \"stabilizer-states\")\n",
-    "import stabilizer_benchmark\n",
-    "\n",
-    "graph = provider_backend.configuration().coupling_map\n",
-    "\n",
-    "stabilizer_benchmark.run(min_qubits=min_qubits, max_qubits=max_qubits, max_circuits=max_circuits, num_shots=num_shots,\n",
-    "                backend_id=backend_id, provider_backend=provider_backend, coupling_graph=graph, n_layers=3,\n",
-    "                hub=hub, group=group, project=project, exec_options=exec_options)"
-   ]
-  },
-  {
-   "cell_type": "markdown",
-   "metadata": {},
-   "source": [
     "### Combined Benchmark Results"
    ]
   },
