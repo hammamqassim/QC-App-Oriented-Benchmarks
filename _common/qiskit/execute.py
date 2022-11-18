@@ -362,7 +362,8 @@ def execute_circuit(circuit):
         global result_processor, width_processor
         postprocessors = backend_exec_options_copy.pop("postprocessor", None)
         if postprocessors:
-            result_processor, width_processor = postprocessors
+            #result_processor, width_processor = postprocessors
+            result_processor = postprocessors
             
         logger.info(f"Executing on backend: {backend.name()}")
             
@@ -381,11 +382,19 @@ def execute_circuit(circuit):
             trans_qc = transpile_and_bind_circuit(circuit["qc"], circuit["params"], backend)
             simulation_circuits = trans_qc
                     
-            # apply transformer pass if provided
+#             # apply transformer pass if provided
+#             if transformer:
+#                 logger.info("applying transformer to noisy simulator")
+#                 simulation_circuits, shots = invoke_transformer(transformer,
+#                                     trans_qc, backend=backend, shots=shots)
+              # apply transformer pass if provided
             if transformer:
-                logger.info("applying transformer to noisy simulator")
-                simulation_circuits, shots = invoke_transformer(transformer,
-                                    trans_qc, backend=backend, shots=shots)
+                ret = invoke_transformer(transformer, trans_qc, backend=backend, shots=shots)
+                trans_qc = ret[0]
+                shots = ret[1]
+                active_circuit["transformer_metadata"] = ret[2]
+#                 if len(ret) == 3:
+#                     active_circuit["transformer_metadata"] = ret[2]
 
             # Indicate number of qubits about to be executed
             if width_processor:
@@ -401,7 +410,7 @@ def execute_circuit(circuit):
                 noise_model=this_noise, basis_gates=this_noise.basis_gates,
                 **backend_exec_options_copy)
             '''   
-            job = execute(simulation_circuits, backend, shots=shots,
+            job = execute(trans_qc, backend, shots=shots,
                 noise_model=this_noise, basis_gates=this_noise.basis_gates,
                 **backend_exec_options_copy)
                 
@@ -422,15 +431,17 @@ def execute_circuit(circuit):
             # transpile and bind circuit with parameters; use cache if flagged                       
             else:
                 trans_qc = transpile_and_bind_circuit(circuit["qc"], circuit["params"], backend,
-                        optimization_level=optimization_level,
-                        layout_method=layout_method,
-                        routing_method=routing_method)
+                                                      optimization_level=optimization_level,
+                                                      layout_method=layout_method,
+                                                      routing_method=routing_method)
             
             # apply transformer pass if provided
             if transformer:
-                trans_qc, shots = invoke_transformer(transformer,
-                        trans_qc, backend=backend, shots=shots)
-            
+                ret = invoke_transformer(transformer, trans_qc, backend=backend, shots=shots)
+                trans_qc = ret[0]
+                shots = ret[1]
+                if len(ret) == 3:
+                    active_circuit["transformer_metadata"] = ret[2]
             # Indicate number of qubits about to be executed
             if width_processor:
                 width_processor(qc)
@@ -704,19 +715,36 @@ def invoke_transformer(transformer, circuit, backend=backend, shots=100):
     st = time.time()
     
     # apply the transformer and get back either a single circuit or a list of circuits
-    tr_circuit = transformer(circuit, backend=backend)
-
+    ## if the transformer is True-Q's NOX, then also return a True-Q circuit collection for later post-processing
+    if hasattr(transformer, '__name__'): 
+        if transformer.__name__ == 'nox':
+            tr_circuit, tq_circuits = transformer(circuit, backend=backend)  
+        else:
+            tr_circuit = transformer(circuit, backend=backend)
+    else:
+        tr_circuit = transformer(circuit, backend=backend)
+        
     # if transformer results in multiple circuits, divide shot count
     # results will be accumulated in job_complete
     # NOTE: this will need to set a flag to distinguish from multiple circuit execution 
+    
+    if hasattr(transformer, '__name__'): 
+        if transformer.__name__ == 'nox':
+            nox_shots = int(shots)
+            
     if isinstance(tr_circuit, list) and len(tr_circuit) > 1:
         shots = int(shots / len(tr_circuit))
-    
+            
     logger.info(f'Transformer - {round(time.time() - st, 5)} (ms)')
     if verbose_time:print(f"  *** transformer() time = {round(time.time() - st, 5)} (ms)")
         
-    return tr_circuit, shots
-
+    if hasattr(transformer, '__name__'): 
+        if transformer.__name__ == 'nox':
+            return tr_circuit, nox_shots, tq_circuits
+        else:
+            return tr_circuit, shots   
+    else:
+        return tr_circuit, shots
     
 ###########################################################################
 
@@ -777,20 +805,20 @@ def job_complete(job):
 
     metrics.store_metric(active_circuit["group"], active_circuit["circuit"], 'elapsed_time', elapsed_time)
     metrics.store_metric(active_circuit["group"], active_circuit["circuit"], 'exec_time', exec_time)
-
+    
     # If a result handler has been established, invoke it here with result object
     if result != None and result_handler:
     
         # invoke a result processor if specified in exec_options
         if result_processor:
             logger.info(f'result_processor(...)')
-            result = result_processor(result)
+            result = result_processor(result, active_circuit)
     
         # The following computes the counts by summing them up, allowing for the case where
         # <result> contains results from multiple circuits
         # DEVNOTE: This will need to change; currently the only case where we have multiple result counts
         # is when using randomly_compile; later, there will be other cases
-        if type(result.get_counts()) == list:
+        if hasattr(result, 'get_counts') and type(result.get_counts()) == list:
             total_counts = dict()
             for count in result.get_counts():
                 total_counts = dict(Counter(total_counts) + Counter(count))
