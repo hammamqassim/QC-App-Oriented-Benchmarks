@@ -380,21 +380,24 @@ def execute_circuit(circuit):
                     
             # transpile and bind circuit with parameters; use cache if flagged   
             trans_qc = transpile_and_bind_circuit(circuit["qc"], circuit["params"], backend)
+            
+            active_circuit['transpiled_circuit'] = trans_qc
+            
             simulation_circuits = trans_qc
                     
 #             # apply transformer pass if provided
-#             if transformer:
-#                 logger.info("applying transformer to noisy simulator")
+            if transformer:
+                logger.info("applying transformer to noisy simulator")
 #                 simulation_circuits, shots = invoke_transformer(transformer,
 #                                     trans_qc, backend=backend, shots=shots)
-              # apply transformer pass if provided
-            if transformer:
+                print('before invoking transformer check')
                 ret = invoke_transformer(transformer, trans_qc, backend=backend, shots=shots)
+                print(f'after invoking transformer, ret has size {len(ret)}')
                 trans_qc = ret[0]
                 shots = ret[1]
-                active_circuit["transformer_metadata"] = ret[2]
-#                 if len(ret) == 3:
-#                     active_circuit["transformer_metadata"] = ret[2]
+                print(f'{shots}')
+                if len(ret) == 3:
+                    active_circuit["transformer_metadata"] = ret[2]
 
             # Indicate number of qubits about to be executed
             if width_processor:
@@ -716,21 +719,16 @@ def invoke_transformer(transformer, circuit, backend=backend, shots=100):
     
     # apply the transformer and get back either a single circuit or a list of circuits
     ## if the transformer is True-Q's NOX, then also return a True-Q circuit collection for later post-processing
-    if hasattr(transformer, '__name__'): 
-        if transformer.__name__ == 'nox':
-            tr_circuit, tq_circuits = transformer(circuit, backend=backend)  
-        else:
-            tr_circuit = transformer(circuit, backend=backend)
+
+    if transformer.__name__ == 'nox':
+        tr_circuit, tq_circuits = transformer(circuit, backend=backend)
+        nox_shots = int(shots/200)
     else:
         tr_circuit = transformer(circuit, backend=backend)
         
     # if transformer results in multiple circuits, divide shot count
     # results will be accumulated in job_complete
     # NOTE: this will need to set a flag to distinguish from multiple circuit execution 
-    
-    if hasattr(transformer, '__name__'): 
-        if transformer.__name__ == 'nox':
-            nox_shots = int(shots)
             
     if isinstance(tr_circuit, list) and len(tr_circuit) > 1:
         shots = int(shots / len(tr_circuit))
@@ -738,13 +736,28 @@ def invoke_transformer(transformer, circuit, backend=backend, shots=100):
     logger.info(f'Transformer - {round(time.time() - st, 5)} (ms)')
     if verbose_time:print(f"  *** transformer() time = {round(time.time() - st, 5)} (ms)")
         
-    if hasattr(transformer, '__name__'): 
-        if transformer.__name__ == 'nox':
-            return tr_circuit, nox_shots, tq_circuits
-        else:
-            return tr_circuit, shots   
+    if transformer.__name__ == 'nox':
+        return tr_circuit, nox_shots, tq_circuits
     else:
-        return tr_circuit, shots
+        return tr_circuit, shots   
+
+    
+# # Invoke a circuit transformer, returning modifed circuit (array) and modifed shots
+# def invoke_transformer(transformer, circuit, backend=backend, shots=100):
+    
+#     logger.info('Invoking Transformer')
+#     st = time.time()
+    
+#     # apply the transformer and get back either a single circuit or a list of circuits
+#     ## if the transformer is True-Q's NOX, then also return a True-Q circuit collection for later post-processing
+    
+#     ret = transformer(circuit, backend=backend)
+#     dic = dict()
+#     dic['TrueQ_circuits']
+#     dic['Transformed_circuits']
+#     dic['Transformed_shots']
+    
+#     return dic
     
 ###########################################################################
 
