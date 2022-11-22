@@ -8,7 +8,6 @@ import copy
 
 def nox_handler(result, active_circuit):
     
-    result_copy = copy.copy(result)
     nox_collection_trueq = active_circuit["transformer_metadata"].copy()
     counts = result.get_counts()
     shots = result.results[0].shots
@@ -23,7 +22,6 @@ def nox_handler(result, active_circuit):
     ret = copy.copy(result)
     
     res_copy.header.name = active_circuit["qc"].name 
-    
     res_copy.data.counts = mitigated_counts
     ret.results = [res_copy]
     

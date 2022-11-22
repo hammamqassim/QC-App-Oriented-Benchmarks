@@ -1,5 +1,5 @@
 '''
-Keysight TrueQ - Randomized Compilation
+Keysight TrueQ - Noisy output extrapolation (NOX)
 '''
 
 import trueq as tq
@@ -20,7 +20,3 @@ def nox(circuit, backend, n_compilations=20):
     nox_collection_qiskit = [tq.interface.qiskit.from_trueq_circ(c, metadata=metadata) for c in nox_collection_trueq]
      
     return nox_collection_qiskit, nox_collection_trueq
-
-
-
-        
