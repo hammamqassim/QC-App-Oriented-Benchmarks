@@ -264,7 +264,8 @@ def submit_circuit(qc, group_id, circuit_id, shots=100, params=None):
 
     # create circuit object with submission time and circuit info
     circuit = { "qc": qc, "group": str(group_id), "circuit": str(circuit_id),
-            "submit_time": time.time(), "shots": shots, "params": params }
+            "submit_time": time.time(), "shots": shots, "machine_shots": shots, "params": params, "result_processor": None }
+    circuit['machine_circuits'] = qc
             
     if verbose:
         print(f'... submit circuit - group={circuit["group"]} id={circuit["circuit"]} shots={circuit["shots"]} params={circuit["params"]}')
@@ -295,6 +296,7 @@ def execute_circuit(circuit):
     logging.info('Entering execute_circuit')
 
     active_circuit = copy.copy(circuit)
+    
     active_circuit["launch_time"] = time.time()
     active_circuit["pollcount"] = 0 
     
@@ -379,13 +381,12 @@ def execute_circuit(circuit):
                     
             # transpile and bind circuit with parameters; use cache if flagged   
             trans_qc = transpile_and_bind_circuit(circuit["qc"], circuit["params"], backend)
-            simulation_circuits = trans_qc
-                    
+            active_circuit['transpiled_circuit'] = trans_qc
+
             # apply transformer pass if provided
             if transformer:
                 logger.info("applying transformer to noisy simulator")
-                simulation_circuits, shots = invoke_transformer(transformer,
-                                    trans_qc, backend=backend, shots=shots)
+                transformer(active_circuit, backend)
 
             # Indicate number of qubits about to be executed
             if width_processor:
@@ -400,8 +401,9 @@ def execute_circuit(circuit):
             job = backend.run(simulation_circuits, shots=shots,
                 noise_model=this_noise, basis_gates=this_noise.basis_gates,
                 **backend_exec_options_copy)
-            '''   
-            job = execute(simulation_circuits, backend, shots=shots,
+            '''
+            
+            job = execute(active_circuit['machine_circuits'], backend, shots=active_circuit['machine_shots'],
                 noise_model=this_noise, basis_gates=this_noise.basis_gates,
                 **backend_exec_options_copy)
                 
@@ -755,6 +757,8 @@ def job_complete(job):
         #print(f"results_obj = {results_obj}")
         #print(f'shots = {results_obj["shots"]}')
         
+        print(f'length of rc results is {len(result_obj["results"])}')
+        
         # get the actual shots and convert to int if it is a string
         actual_shots = 0
         for experiment in result_obj["results"]:
@@ -782,30 +786,9 @@ def job_complete(job):
     if result != None and result_handler:
     
         # invoke a result processor if specified in exec_options
-        if result_processor:
+        if active_circuit['result_processor']:
             logger.info(f'result_processor(...)')
-            result = result_processor(result)
-    
-        # The following computes the counts by summing them up, allowing for the case where
-        # <result> contains results from multiple circuits
-        # DEVNOTE: This will need to change; currently the only case where we have multiple result counts
-        # is when using randomly_compile; later, there will be other cases
-        if type(result.get_counts()) == list:
-            total_counts = dict()
-            for count in result.get_counts():
-                total_counts = dict(Counter(total_counts) + Counter(count))
-                
-            # make a copy of the result object so we can return a modified version
-            orig_result = result
-            result = copy.copy(result) 
-
-            # replace the results array with an array containing only the first results object
-            # then populate other required fields
-            results = copy.copy(result.results[0])
-            results.header.name = active_circuit["qc"].name     # needed to identify the original circuit
-            results.shots = actual_shots
-            results.data.counts = total_counts
-            result.results = [ results ]
+            result = active_circuit['result_processor'](result, active_circuit)
             
         try:
             result_handler(active_circuit["qc"],
