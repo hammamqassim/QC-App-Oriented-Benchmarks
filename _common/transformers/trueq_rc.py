@@ -88,7 +88,7 @@ def aggregate(result_object, active_circuit):
         # then populate other required fields
         
         results = copy.copy(result.results[0])
-        results.header.name = active_circuit["qc"].name     # needed to identify the original circuit
+        results.header.name = active_circuit["qc"].name     # needed to identify the original circuit -- this is the only reason we're requiring active_circuit as argument to aggregate
         results.shots = actual_shots
         results.data.counts = total_counts
         result.results = [ results ]
